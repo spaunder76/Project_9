@@ -3,17 +3,22 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import Project, Contributor, Issue, Comment
-from .serializers import ProjectSerializer, ContributorSerializer, IssueSerializer, CommentSerializer
+from .serializers import (
+    ProjectSerializer,
+    ContributorSerializer,
+    IssueSerializer,
+    CommentSerializer,
+)
 
 from .permissions import IsOwnerOrReadOnly
 
 from rest_framework.pagination import PageNumberPagination
 
+
 class CustomPagination(PageNumberPagination):
     page_size = 10
-    page_size_query_param = 'page_size'
+    page_size_query_param = "page_size"
     max_page_size = 100
-
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -23,14 +28,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
     pagination_class = CustomPagination
 
     def get_queryset(self):
-        if self.request.user.is_staff:
-            return self.queryset
-        else:
-            return self.queryset.filter(contributors__user=self.request.user)
+        # Only show projects where the user is a contributor
+        return self.queryset.filter(contributors__user=self.request.user)
 
     def perform_create(self, serializer):
         project = serializer.save(author=self.request.user)
         Contributor.objects.create(user=self.request.user, project=project)
+
 
 class ContributorViewSet(viewsets.ModelViewSet):
     queryset = Contributor.objects.all()
@@ -39,16 +43,16 @@ class ContributorViewSet(viewsets.ModelViewSet):
     pagination_class = CustomPagination
 
     def get_queryset(self):
-        if self.request.user.is_staff:
-            return self.queryset
-        else:
-            return Contributor.objects.filter(project__contributors__user=self.request.user)
+        return Contributor.objects.filter(project__contributors__user=self.request.user)
 
     def perform_create(self, serializer):
-        project_id = self.request.data.get('project')
+        project_id = self.request.data.get("project")
         project = Project.objects.get(id=project_id)
         if not project.contributors.filter(user=self.request.user).exists():
-            return Response({"error": "You are not a contributor to this project"}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "You are not a contributor to this project"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer.save()
 
 
@@ -68,12 +72,11 @@ class IssueViewSet(viewsets.ModelViewSet):
         else:
             author_issues = self.queryset.filter(author=user)
             contributor_issues = self.queryset.filter(project__contributors__user=user)
-            
+
             if author_issues.exists():
                 return author_issues
             else:
                 return contributor_issues
-
 
 
 class CommentViewSet(viewsets.ModelViewSet):
@@ -88,8 +91,10 @@ class CommentViewSet(viewsets.ModelViewSet):
             return self.queryset
         else:
             author_comments = self.queryset.filter(author=user)
-            contributor_comments = self.queryset.filter(issue__project__contributors__user=user)
-            
+            contributor_comments = self.queryset.filter(
+                issue__project__contributors__user=user
+            )
+
             if author_comments.exists():
                 return author_comments
             else:
@@ -97,4 +102,3 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
-
